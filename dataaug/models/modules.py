@@ -96,7 +96,11 @@ class GradRegularizer:
     def _double_autograd(self, grads, inputs, labels, pre_grads):
         """Implement this via pytorch's autograd. Are the pre_grad mods autograd safe?"""
         vhp = torch.autograd.grad(
-            grads, self.model.parameters(), grad_outputs=grads, create_graph=False, retain_graph=True if pre_grads is not None else False
+            grads,
+            self.model.parameters(),
+            grad_outputs=grads,
+            create_graph=False,
+            retain_graph=pre_grads is not None,
         )
 
         correction_factor = self.get_correction_factor()
@@ -107,7 +111,7 @@ class GradRegularizer:
                 self.model.parameters(),
                 grad_outputs=pre_grads,
                 create_graph=False,
-                retain_graph=True if pre_grads is not None else False,
+                retain_graph=pre_grads is not None,
             )
 
             torch._foreach_add_(grads, vhp, alpha=correction_factor * self.acc_strength)

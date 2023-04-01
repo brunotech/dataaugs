@@ -80,7 +80,7 @@ class ResNet(torch.nn.Module):
         self.dilation = 1
         if len(replace_stride_with_dilation) != 4:
             raise ValueError(
-                "replace_stride_with_dilation should be None " "or a 4-element tuple, got {}".format(replace_stride_with_dilation)
+                f"replace_stride_with_dilation should be None or a 4-element tuple, got {replace_stride_with_dilation}"
             )
         self.groups = groups
         self.base_width = width_per_group if block is Bottleneck else 64
@@ -167,14 +167,30 @@ class ResNet(torch.nn.Module):
                 )
             elif downsample == "B":
                 downsample_op = torch.nn.Sequential(
-                    conv_layer(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=self.use_bias),
-                    norm_layer(planes * block.expansion) if not isinstance(norm_layer, Skipper) else torch.nn.Identity(),
+                    conv_layer(
+                        self.inplanes,
+                        planes * block.expansion,
+                        kernel_size=1,
+                        stride=stride,
+                        bias=self.use_bias,
+                    ),
+                    torch.nn.Identity()
+                    if isinstance(norm_layer, Skipper)
+                    else norm_layer(planes * block.expansion),
                 )
             elif downsample == "C":
                 downsample_op = torch.nn.Sequential(
                     torch.nn.AvgPool2d(kernel_size=stride, stride=stride),
-                    conv_layer(self.inplanes, planes * block.expansion, kernel_size=1, stride=1, bias=self.use_bias),
-                    norm_layer(planes * block.expansion) if not isinstance(norm_layer, Skipper) else torch.nn.Identity(),
+                    conv_layer(
+                        self.inplanes,
+                        planes * block.expansion,
+                        kernel_size=1,
+                        stride=1,
+                        bias=self.use_bias,
+                    ),
+                    torch.nn.Identity()
+                    if isinstance(norm_layer, Skipper)
+                    else norm_layer(planes * block.expansion),
                 )
             elif downsample == "preact-B":
                 downsample_op = torch.nn.Sequential(
@@ -190,8 +206,7 @@ class ResNet(torch.nn.Module):
             else:
                 raise ValueError("Invalid downsample block specification.")
 
-        layers = []
-        layers.append(
+        layers = [
             block(
                 self.inplanes,
                 planes,
@@ -205,22 +220,21 @@ class ResNet(torch.nn.Module):
                 norm_layer=norm_layer,
                 bias=self.use_bias,
             )
-        )
+        ]
         self.inplanes = planes * block.expansion
-        for _ in range(1, blocks):
-            layers.append(
-                block(
-                    self.inplanes,
-                    planes,
-                    groups=self.groups,
-                    base_width=self.base_width,
-                    dilation=self.dilation,
-                    norm_layer=norm_layer,
-                    nonlin=nonlin_layer,
-                    bias=self.use_bias,
-                )
+        layers.extend(
+            block(
+                self.inplanes,
+                planes,
+                groups=self.groups,
+                base_width=self.base_width,
+                dilation=self.dilation,
+                norm_layer=norm_layer,
+                nonlin=nonlin_layer,
+                bias=self.use_bias,
             )
-
+            for _ in range(1, blocks)
+        )
         return torch.nn.Sequential(*layers)
 
     def _forward_impl(self, x):

@@ -11,7 +11,7 @@ def unitwise_norm(x):
     if (len(torch.squeeze(x).shape)) <= 1:  # Scalars, vectors
         axis = 0
         keepdims = False
-    elif len(x.shape) in [2, 3]:  # Linear layers
+    elif len(x.shape) in {2, 3}:  # Linear layers
         # Original code: IO
         # Pytorch: OI
         axis = 1
@@ -33,11 +33,11 @@ class SGD_AGC(Optimizer):
     def __init__(self, named_params, lr: float, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, clipping: float = None, eps: float = 1e-3):
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
+            raise ValueError(f"Invalid momentum value: {momentum}")
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
                         weight_decay=weight_decay, nesterov=nesterov,
@@ -49,11 +49,7 @@ class SGD_AGC(Optimizer):
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
 
-        # Put params in list so each one gets its own group
-        params = []
-        for name, param in named_params:
-            params.append({'params': param, 'name': name})
-
+        params = [{'params': param, 'name': name} for name, param in named_params]
         super(SGD_AGC, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -104,11 +100,7 @@ class SGD_AGC(Optimizer):
                     else:
                         buf = param_state['momentum_buffer']
                         buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
-                    if nesterov:
-                        d_p = d_p.add(buf, alpha=momentum)
-                    else:
-                        d_p = buf
-
+                    d_p = d_p.add(buf, alpha=momentum) if nesterov else buf
                 p.add_(d_p, alpha=-group['lr'])
 
         return loss

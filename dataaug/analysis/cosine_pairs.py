@@ -6,10 +6,7 @@ import numpy as np
 
 def flatten_unit(w1):
     """Flatten and normalize vectors"""
-    res_list = []
-
-    for w in w1:
-        res_list.append(w.reshape(-1))
+    res_list = [w.reshape(-1) for w in w1]
     res = torch.concat(res_list)
     res = res / torch.norm(res)
     return res
@@ -30,8 +27,7 @@ def compute_cosinesim(model, dataloader, loss_fn, setup, cfg=None):
     model.eval()
     accum_cosinesims = []
     num_pairs = max(int(cfg.analysis.cossim_numpairs), len(dataloader)) // len(dataloader)
-    for block, (inputs, labels) in enumerate(dataloader):
-
+    for inputs, labels in dataloader:
         inputs = inputs.to(**setup, non_blocking=cfg.impl.non_blocking)
         labels = labels.to(dtype=torch.long, device=setup["device"], non_blocking=cfg.impl.non_blocking)
         count = 0
@@ -88,9 +84,13 @@ def compute_cosinesim_blevel(model, dataloader, loss_fn, setup, cfg=None):
             inputs, labels = next(dataloader_iterator)
 
         cs3 = compute_grad_blevel(inputs, labels, model, loss_fn, cfg, setup)
-        accum_cosinesims.append(torch.dot(cs1, cs2).item())
-        accum_cosinesims.append(torch.dot(cs1, cs3).item())
-        accum_cosinesims.append(torch.dot(cs3, cs2).item())
+        accum_cosinesims.extend(
+            (
+                torch.dot(cs1, cs2).item(),
+                torch.dot(cs1, cs3).item(),
+                torch.dot(cs3, cs2).item(),
+            )
+        )
         cs1 = cs1.clone()
         cs2 = cs3.clone()
 

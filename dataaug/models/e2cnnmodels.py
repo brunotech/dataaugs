@@ -144,11 +144,7 @@ class WideBasic(enn.EquivariantModule):
         else:
             rotations = 0
 
-        if rotations in [0, 2, 4]:
-            conv = conv3x3
-        else:
-            conv = conv5x5
-
+        conv = conv3x3 if rotations in [0, 2, 4] else conv5x5
         self.bn1 = enn.InnerBatchNorm(self.in_type)
         self.relu1 = enn.ReLU(self.in_type, inplace=True)
         self.conv1 = conv(self.in_type, inner_type)
@@ -170,11 +166,7 @@ class WideBasic(enn.EquivariantModule):
         out = self.dropout(out)
         out = self.conv2(out)
 
-        if self.shortcut is not None:
-            out += self.shortcut(x_n)
-        else:
-            out += x
-
+        out += self.shortcut(x_n) if self.shortcut is not None else x
         return out
 
     def evaluate_output_shape(self, input_shape: Tuple):
@@ -249,16 +241,9 @@ class Wide_ResNet(torch.nn.Module):
         # if the model is [F]lip equivariant
         self._f = f
         if self._f:
-            if N != 1:
-                self.gspace = gspaces.FlipRot2dOnR2(N)
-            else:
-                self.gspace = gspaces.Flip2dOnR2()
+            self.gspace = gspaces.FlipRot2dOnR2(N) if N != 1 else gspaces.Flip2dOnR2()
         else:
-            if N != 1:
-                self.gspace = gspaces.Rot2dOnR2(N)
-            else:
-                self.gspace = gspaces.TrivialOnR2()
-
+            self.gspace = gspaces.Rot2dOnR2(N) if N != 1 else gspaces.TrivialOnR2()
         # level of [R]estriction:
         #   r = 0: never do restriction, i.e. initial group (either DN or CN) preserved for the whole network
         #   r = 1: restrict before the last block, i.e. initial group (either DN or CN) preserved for the first
@@ -268,7 +253,7 @@ class Wide_ResNet(torch.nn.Module):
         #   r = 3: restrict after each block. Initial group (either DN or CN) preserved for the first
         #          block, then restrict to N/2 rotations (either D{N/2} or C{N/2}) in the second block and to 1 rotation
         #          in the last one (D1 or C1)
-        assert r in [0, 1, 2, 3]
+        assert r in {0, 1, 2, 3}
         self._r = r
 
         # the input has 3 color channels (RGB).
@@ -327,14 +312,12 @@ class Wide_ResNet(torch.nn.Module):
             print(f"\t{i} - {name}")
 
     def _restrict_layer(self, subgroup_id) -> enn.SequentialModule:
-        layers = list()
-        layers.append(enn.RestrictionModule(self._in_type, subgroup_id))
+        layers = [enn.RestrictionModule(self._in_type, subgroup_id)]
         layers.append(enn.DisentangleModule(layers[-1].out_type))
         self._in_type = layers[-1].out_type
         self.gspace = self._in_type.gspace
 
-        restrict_layer = enn.SequentialModule(*layers)
-        return restrict_layer
+        return enn.SequentialModule(*layers)
 
     def _wide_layer(
         self, block, planes: int, num_blocks: int, dropout_rate: float, stride: int, totrivial: bool = False
@@ -354,10 +337,7 @@ class Wide_ResNet(torch.nn.Module):
             out_type = FIELD_TYPE["regular"](self.gspace, planes, fixparams=self._fixparams)
 
         for b, stride in enumerate(strides):
-            if b == num_blocks - 1:
-                out_f = out_type
-            else:
-                out_f = main_type
+            out_f = out_type if b == num_blocks - 1 else main_type
             layers.append(block(self._in_type, inner_type, dropout_rate, stride, out_type=out_f))
             self._in_type = out_f
 
@@ -442,16 +422,9 @@ class ComparableResNet(Wide_ResNet):
         # if the model is [F]lip equivariant
         self._f = f
         if self._f:
-            if N != 1:
-                self.gspace = gspaces.FlipRot2dOnR2(N)
-            else:
-                self.gspace = gspaces.Flip2dOnR2()
+            self.gspace = gspaces.FlipRot2dOnR2(N) if N != 1 else gspaces.Flip2dOnR2()
         else:
-            if N != 1:
-                self.gspace = gspaces.Rot2dOnR2(N)
-            else:
-                self.gspace = gspaces.TrivialOnR2()
-
+            self.gspace = gspaces.Rot2dOnR2(N) if N != 1 else gspaces.TrivialOnR2()
         # level of [R]estriction:
         #   r = 0: never do restriction, i.e. initial group (either DN or CN) preserved for the whole network
         #   r = 1: restrict before the last block, i.e. initial group (either DN or CN) preserved for the first
@@ -461,7 +434,7 @@ class ComparableResNet(Wide_ResNet):
         #   r = 3: restrict after each block. Initial group (either DN or CN) preserved for the first
         #          block, then restrict to N/2 rotations (either D{N/2} or C{N/2}) in the second block and to 1 rotation
         #          in the last one (D1 or C1)
-        assert r in [0, 1, 2, 3]
+        assert r in {0, 1, 2, 3}
         self._r = r
 
         # the input has 3 color channels (RGB).

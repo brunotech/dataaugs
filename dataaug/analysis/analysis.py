@@ -24,9 +24,8 @@ def analyze(model, loss_fn, optimizer, augmented_dataloader, stats, setup, cfg):
     param_vector = torch.cat([param.cpu().reshape(-1) for param in model.parameters()])
 
     # record model size for crosschecks:
-    num_params, num_buffers = (
-        sum([p.numel() for p in model.parameters()]),
-        sum([b.numel() for b in model.buffers()]),
+    num_params, num_buffers = sum(p.numel() for p in model.parameters()), sum(
+        b.numel() for b in model.buffers()
     )
     stats["num_parameters"] += [num_params]
     stats["num_buffers"] += [num_buffers]
@@ -188,13 +187,15 @@ def _get_unaugmented_dataloader(dataloader, cfg_data):
             filtered_transforms.append(transform)
     dataset_without_augmentations.transform.transforms = filtered_transforms
 
-    dataloader_without_augmentations = torch.utils.data.DataLoader(
+    return torch.utils.data.DataLoader(
         dataset_without_augmentations,
-        batch_size=min(cfg_data.batch_size, len(dataset_without_augmentations)),
+        batch_size=min(
+            cfg_data.batch_size, len(dataset_without_augmentations)
+        ),
         shuffle=True,
         drop_last=True,
-        num_workers=min(torch.get_num_threads(), 16) // max(1, torch.cuda.device_count()),
+        num_workers=min(torch.get_num_threads(), 16)
+        // max(1, torch.cuda.device_count()),
         pin_memory=True,
         persistent_workers=False,
     )
-    return dataloader_without_augmentations

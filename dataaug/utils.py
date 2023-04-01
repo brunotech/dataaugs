@@ -143,19 +143,16 @@ def save_summary(cfg, stats, local_time, exp="fb_"):
     log = get_log(cfg)
     # 1) detailed table:
     for step in range(len(stats["train_loss"])):
-        iteration = dict()
+        iteration = {}
         for key in stats:
             iteration[key] = stats[key][step] if step < len(stats[key]) else None
         save_to_table(".", f"{cfg.name}_convergence_results", dryrun=cfg.dryrun, **iteration)
 
     def _maybe_record(key):
-        if len(stats[key]) > 0:
-            return stats[key][-1]
-        else:
-            return ""
+        return stats[key][-1] if len(stats[key]) > 0 else ""
 
     # Print final stats:
-    metrics = dict()
+    metrics = {}
     for stat_name in stats.keys():
         metrics[stat_name] = _maybe_record(stat_name)
         if "valid_acc" in stat_name:
@@ -168,16 +165,20 @@ def save_summary(cfg, stats, local_time, exp="fb_"):
         optimizer=cfg.hyp.optim.name,
         stoch=cfg.hyp.train_stochastic,
         real_size=cfg.data.size,
-        augmentations=True if cfg.data.augmentations_train not in [None, "", " "] else False,
+        augmentations=cfg.data.augmentations_train not in [None, "", " "],
         **metrics,
-        avg_step_time=np.median(np.asarray(stats["train_time"], dtype=np.float)),
-        total_time=str(datetime.timedelta(seconds=local_time)).replace(",", ""),
+        avg_step_time=np.median(
+            np.asarray(stats["train_time"], dtype=np.float)
+        ),
+        total_time=str(datetime.timedelta(seconds=local_time)).replace(
+            ",", ""
+        ),
         batch_size=cfg.data.batch_size,
         width=cfg.model.width if "width" in cfg.model else None,
         **cfg.hyp,
         **{k: v for k, v in cfg.impl.items() if k != "setup"},
         seed=cfg.seed,
-        folder=os.getcwd().split("outputs/")[1],
+        folder=os.getcwd().split("outputs/")[1]
     )
     save_to_table(os.path.join(cfg.original_cwd, "tables"), f"{exp}{cfg.data.name}_runs", dryrun=cfg.dryrun, **summary)
 
@@ -203,10 +204,6 @@ def save_to_table(out_dir, table_name, dryrun, **kwargs):
             with open(fname, "w") as f:
                 writer = csv.DictWriter(f, delimiter="\t", fieldnames=fieldnames)
                 writer.writeheader()
-        else:
-            pass
-            # print(f'Would create new .csv table {fname}.')
-
     # Write a new row
     if not dryrun:
         # Add row for this experiment
@@ -214,8 +211,6 @@ def save_to_table(out_dir, table_name, dryrun, **kwargs):
             writer = csv.DictWriter(f, delimiter="\t", fieldnames=fieldnames)
             writer.writerow(kwargs)
         # print('\nResults saved to ' + fname + '.')
-    else:
-        pass
         # print(f'Would save results to {fname}.')
 
 

@@ -69,7 +69,7 @@ class DenseNet(torch.nn.Module):
         self._conv_layer, self._norm_layer, self._nonlin_layer = get_layer_functions(convolution_type, norm, nonlin)
 
         # First convolution in different variations
-        if stem in ['imagenet', 'standard']:
+        if stem in {'imagenet', 'standard'}:
             self.features = torch.nn.Sequential(OrderedDict([
                 ('conv0', self._conv_layer(channels, num_init_features, kernel_size=7, stride=2,
                                            padding=3, bias=False)),
@@ -181,7 +181,7 @@ class _DenseLayer(torchvision.models.densenet._DenseLayer):
         self.add_module('conv2', convolution(bn_size * growth_rate, growth_rate,
                                              kernel_size=3, stride=1, padding=1,
                                              bias=False))
-        self.drop_rate = float(drop_rate)
+        self.drop_rate = drop_rate
         self.memory_efficient = memory_efficient
 
 

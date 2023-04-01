@@ -64,8 +64,7 @@ class VPReLU(nn.Module):
         return F.relu(input, inplace=self.inplace) * 1.7139588594436646
 
     def extra_repr(self) -> str:
-        inplace_str = 'inplace=True' if self.inplace else ''
-        return inplace_str
+        return 'inplace=True' if self.inplace else ''
 
 
 activations_dict = {

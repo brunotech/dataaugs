@@ -45,7 +45,7 @@ def train_sgd(model, trainloader, validloaders, setup, cfg):
     @torch.no_grad()
     def _record_stats(stats, pre_grads, step_loss, step_preds, datapoints, train_time):
         # Compute full loss:
-        param_norm = sum([p.detach().pow(2).sum() for p in model.parameters()])
+        param_norm = sum(p.detach().pow(2).sum() for p in model.parameters())
         full_loss = step_loss / num_blocks + 0.5 * getattr(cfg.hyp.optim, "weight_decay", 0.0) * param_norm
         if torch.distributed.is_initialized():
             package = torch.stack([step_loss, step_preds, full_loss])
@@ -121,16 +121,28 @@ def train_sgd(model, trainloader, validloaders, setup, cfg):
                 log.info(status_message(optimizer, stats, Counter.step))
 
             # Save internal checkpoints from rank 0 [Separate from model dict saves]
-            if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
-                if cfg.impl.checkpoint.name is not None:
-                    if (Counter.step) % cfg.impl.checkpoint.save_every_nth_step == 0 or Counter.step == cfg.hyp.steps:
-                        file = os.path.join(cfg.original_cwd, "checkpoints", cfg.impl.checkpoint.name)
-                        _save_to_checkpoint(model, optimizer, scheduler, None, Counter, file=file)
+            if (
+                (
+                    not torch.distributed.is_initialized()
+                    or torch.distributed.get_rank() == 0
+                )
+                and cfg.impl.checkpoint.name is not None
+                and (
+                    (Counter.step) % cfg.impl.checkpoint.save_every_nth_step
+                    == 0
+                    or Counter.step == cfg.hyp.steps
+                )
+            ):
+                file = os.path.join(cfg.original_cwd, "checkpoints", cfg.impl.checkpoint.name)
+                _save_to_checkpoint(model, optimizer, scheduler, None, Counter, file=file)
 
             # Run optional analysis stuff
-            if cfg.analysis.type is not None:
-                if ((Counter.step + 1) % cfg.analysis.check_every_nth_step == 0) or (Counter.step == cfg.hyp.steps) or cfg.dryrun:
-                    analyze(model, loss_fn, optimizer, trainloader, stats, setup, cfg)
+            if cfg.analysis.type is not None and (
+                ((Counter.step + 1) % cfg.analysis.check_every_nth_step == 0)
+                or (Counter.step == cfg.hyp.steps)
+                or cfg.dryrun
+            ):
+                analyze(model, loss_fn, optimizer, trainloader, stats, setup, cfg)
 
             Counter.step += 1
             if cfg.dryrun or (Counter.step == cfg.hyp.steps):  # break out of last epoch when step limit is reached.
@@ -155,17 +167,14 @@ def evaluate_per_class(model, dataloaders, stats, setup, cfg_impl, cfg_hyp, dryr
     """
     loss_fn = torch.nn.CrossEntropyLoss()
     model.eval()
-    if cfg_impl.setup.dist:
-        # Synchronize statistics across machines if any exist:
-        # This block cannot be inside inference_mode
-        if len(list(model.buffers())) > 0:
-            concat_buf = torch.cat([b.data.reshape(-1) for b in model.buffers()])
-            torch.distributed.all_reduce(concat_buf, async_op=False)
-            pointer = 0
-            for buffer in model.buffers():
-                num_values = buffer.numel()
-                buffer.data = concat_buf[pointer : pointer + num_values].view_as(buffer) / cfg_impl.setup.world_size
-                pointer += num_values
+    if cfg_impl.setup.dist and list(model.buffers()):
+        concat_buf = torch.cat([b.data.reshape(-1) for b in model.buffers()])
+        torch.distributed.all_reduce(concat_buf, async_op=False)
+        pointer = 0
+        for buffer in model.buffers():
+            num_values = buffer.numel()
+            buffer.data = concat_buf[pointer : pointer + num_values].view_as(buffer) / cfg_impl.setup.world_size
+            pointer += num_values
 
     if stats is None:
         stats = defaultdict(list)
@@ -177,15 +186,16 @@ def evaluate_per_class(model, dataloaders, stats, setup, cfg_impl, cfg_hyp, dryr
             correct_preds_per_class, data_point_per_class = [0] * num_classes, [0] * num_classes
 
             # Iterate over all blocks in the validation dataset
-            for block, (inputs, labels) in enumerate(dataloader):
+            for inputs, labels in dataloader:
                 datapoints += labels.shape[0]
                 inputs = inputs.to(**setup, non_blocking=cfg_impl.non_blocking)
                 labels = labels.to(dtype=torch.long, device=setup["device"], non_blocking=cfg_impl.non_blocking)
 
-                if cfg_hyp.test_time_flips:
-                    outputs = (model(inputs) + model(torch.flip(inputs, [3]))) / 2
-                else:
-                    outputs = model(inputs)
+                outputs = (
+                    (model(inputs) + model(torch.flip(inputs, [3]))) / 2
+                    if cfg_hyp.test_time_flips
+                    else model(inputs)
+                )
                 block_loss = loss_fn(outputs, labels)
                 step_loss += block_loss.item() * labels.shape[0]
 
@@ -199,7 +209,9 @@ def evaluate_per_class(model, dataloaders, stats, setup, cfg_impl, cfg_hyp, dryr
                     break
 
             stats[f"{name}_valid_loss"] += [step_loss / datapoints]
-            stats[f"{name}_valid_acc"] += [sum([p.item() for p in correct_preds_per_class]) / datapoints]
+            stats[f"{name}_valid_acc"] += [
+                sum(p.item() for p in correct_preds_per_class) / datapoints
+            ]
             if eval_per_class_acc:
                 for cls_idx in range(num_classes):
                     # Stay in torch for Nan propagation
@@ -220,17 +232,16 @@ def get_loss_fn(cfg_hyp, batch_size):
             loss_fn = torch.jit.script(IncorrectCrossEntropyLoss(smoothing=cfg_hyp.label_smoothing))
         else:
             raise ValueError("Loss modification not implemented in conjunction with label smoothing.")
+    elif cfg_hyp.loss_modification is None:
+        loss_fn = torch.nn.CrossEntropyLoss()
+    elif cfg_hyp.loss_modification == "incorrect-xent":
+        loss_fn = torch.jit.script(IncorrectCrossEntropyLoss(smoothing=0.0))
+    elif cfg_hyp.loss_modification == "batch-maxup":
+        loss_fn = torch.jit.script(MaxupLoss(ntrials=batch_size))
+    elif "maxup" in cfg_hyp.loss_modification:
+        loss_fn = torch.jit.script(MaxupLoss(ntrials=int(cfg_hyp.loss_modification.split("maxup-")[1])))
     else:
-        if cfg_hyp.loss_modification is None:
-            loss_fn = torch.nn.CrossEntropyLoss()
-        elif cfg_hyp.loss_modification == "incorrect-xent":
-            loss_fn = torch.jit.script(IncorrectCrossEntropyLoss(smoothing=0.0))
-        elif cfg_hyp.loss_modification == "batch-maxup":
-            loss_fn = torch.jit.script(MaxupLoss(ntrials=batch_size))
-        elif "maxup" in cfg_hyp.loss_modification:
-            loss_fn = torch.jit.script(MaxupLoss(ntrials=int(cfg_hyp.loss_modification.split("maxup-")[1])))
-        else:
-            raise ValueError(f"Invalid loss modification {cfg_hyp.loss_modification}.")
+        raise ValueError(f"Invalid loss modification {cfg_hyp.loss_modification}.")
 
     return loss_fn
 

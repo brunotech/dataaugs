@@ -129,11 +129,9 @@ class MobileNetV2(nn.Module):
     def _make_layers(self, in_planes, train_dp=0, test_dp=0, droplayer=0, bdp=0):
         layers = []
 
-        # get the total number of blocks
-        nblks = 0
-        for expansion, out_planes, num_blocks, stride in self.cfg:
-            nblks += num_blocks
-
+        nblks = sum(
+            num_blocks for expansion, out_planes, num_blocks, stride in self.cfg
+        )
         dl_step = droplayer / nblks
 
         blkidx = 0

@@ -265,7 +265,7 @@ def total_loss(loader, criterion, model, setup, dryrun=False):
     running_average = 0
     num_samples = 0
     with torch.inference_mode():
-        for batch_idx, (inputs, targets) in enumerate(loader):
+        for inputs, targets in loader:
             inputs = inputs.to(**setup)
             targets = targets.to(dtype=torch.long, device=setup["device"])
             loss = criterion(model(inputs), targets)
