@@ -21,14 +21,18 @@ def ConvMixer(dim, depth, channels=3, kernel_size=9, patch_size=7, n_classes=100
             nn.Sequential(
                 Residual(
                     nn.Sequential(
-                        nn.Conv2d(dim, dim, kernel_size, groups=dim, padding="same"), nn.GELU(), nn.BatchNorm2d(dim)
+                        nn.Conv2d(
+                            dim, dim, kernel_size, groups=dim, padding="same"
+                        ),
+                        nn.GELU(),
+                        nn.BatchNorm2d(dim),
                     )
                 ),
                 nn.Conv2d(dim, dim, kernel_size=1),
                 nn.GELU(),
                 nn.BatchNorm2d(dim),
             )
-            for i in range(depth)
+            for _ in range(depth)
         ],
         nn.AdaptiveAvgPool2d((1, 1)),
         nn.Flatten(),

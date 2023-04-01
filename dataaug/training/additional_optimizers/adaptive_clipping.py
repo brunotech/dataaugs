@@ -14,11 +14,11 @@ class AdaptiveGradientClipping(torch.optim.SGD):
     def __init__(self, params, lr=0.1, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, interval=10, norm_type=2):
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
+            raise ValueError(f"Invalid momentum value: {momentum}")
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening, nesterov=nesterov,
                         weight_decay=weight_decay, interval=interval, norm_type=float(norm_type))
@@ -63,16 +63,15 @@ class AdaptiveGradientClipping(torch.optim.SGD):
             # Accumulate norm values
             self.state['norms'].append(grad_norm)
             super().step()
-            return
         else:
             # Check and recommend scaling here
             recent_norm_max = max(self.state['norms'][-global_group['interval']:])
 
             if grad_norm < recent_norm_max:
                 self.state['norms'].append(grad_norm)
-                return
             else:
                 print(f'Recent maximum grad norm was {recent_norm_max}, but new norm is {grad_norm.item()}. Rescaling ...')
                 self._scale_gradients(grad_norm, recent_norm_max)
                 super().step()
-                return
+
+        return

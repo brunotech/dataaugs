@@ -39,17 +39,16 @@ class LMDBDataset(torch.utils.data.Dataset):
         # self.dataset = dataset
 
         self.live_transform = copy.deepcopy(dataset.transform)
-        if self.live_transform is not None:
-            if isinstance(self.live_transform.transforms[0], torchvision.transforms.ToTensor):
-                self.skip_pillow = True
-                self.live_transform.transforms.pop(0)
-                db_channels_first = True
-            else:
-                db_channels_first = False
-                self.skip_pillow = False
-        else:
+        if self.live_transform is None:
             db_channels_first = False
             self.skip_pillow = True
+        elif isinstance(self.live_transform.transforms[0], torchvision.transforms.ToTensor):
+            self.skip_pillow = True
+            self.live_transform.transforms.pop(0)
+            db_channels_first = True
+        else:
+            db_channels_first = False
+            self.skip_pillow = False
         self.path, self.handle = _choose_lmdb_path(dataset, cfg_db, db_channels_first, name="train")
         if can_create:
             _maybe_create_lmdb(dataset, self.path, cfg_db, db_channels_first, name="train")
@@ -137,7 +136,7 @@ class LMDBDataset(torch.utils.data.Dataset):
         """
 
         if self.access == "cursor":
-            index_key = "{}".format(index).encode("ascii")
+            index_key = f"{index}".encode("ascii")
             if index_key != self.cursor.key():
                 self.cursor.set_key(index_key)
 
@@ -151,10 +150,11 @@ class LMDBDataset(torch.utils.data.Dataset):
         # Tested this and the LMDB cannot be corrupted this way, even though byteflow is technically non-writeable
         data_block = torch.frombuffer(byteflow, dtype=torch.uint8).view(self.shape)
 
-        if not self.skip_pillow:
-            img = Image.fromarray(data_block.numpy())
-        else:
-            img = data_block.to(torch.float) / 255
+        img = (
+            data_block.to(torch.float) / 255
+            if self.skip_pillow
+            else Image.fromarray(data_block.numpy())
+        )
         if self.live_transform is not None:
             img = self.live_transform(img)
 
@@ -186,10 +186,9 @@ def _choose_lmdb_path(raw_dataset, cfg_db, db_channels_first=False, name="train"
 
 
 def _maybe_create_lmdb(raw_dataset, path, cfg_db, db_channels_first=False, name="train"):
-    if cfg_db.rebuild_existing_database:
-        if os.path.isfile(path):
-            os.remove(path)
-            os.remove(path + "-lock")
+    if cfg_db.rebuild_existing_database and os.path.isfile(path):
+        os.remove(path)
+        os.remove(f"{path}-lock")
 
     # Load or create database
     if os.path.isfile(path) and not cfg_db.temporary_database:
@@ -258,17 +257,20 @@ def _create_database(dataset, database_path, cfg_db, db_channels_first=False, na
     timestamp = time.time()
     labels = []
     for round in range(iterations):
-        for batch_idx, (img_batch, label_batch) in enumerate(cacheloader):
+        for img_batch, label_batch in cacheloader:
             # Run data transformations in (multiprocessed) batches
             for img, label in zip(img_batch, label_batch):
                 # But we have to write sequentially anyway
                 labels.append(label.item())
                 # serialize
-                if db_channels_first:
-                    byteflow = np.asarray(img.numpy(), dtype=np.uint8).tobytes()
-                else:
-                    byteflow = np.asarray(img.permute(1, 2, 0).numpy(), dtype=np.uint8).tobytes()
-                txn.put("{}".format(idx).encode("ascii"), byteflow)
+                byteflow = (
+                    np.asarray(img.numpy(), dtype=np.uint8).tobytes()
+                    if db_channels_first
+                    else np.asarray(
+                        img.permute(1, 2, 0).numpy(), dtype=np.uint8
+                    ).tobytes()
+                )
+                txn.put(f"{idx}".encode("ascii"), byteflow)
                 idx += 1
 
                 if idx % cfg_db.write_frequency == 0:
@@ -294,7 +296,7 @@ def _create_database(dataset, database_path, cfg_db, db_channels_first=False, na
             )
     # finalize dataset
     txn.commit()
-    keys = ["{}".format(k).encode("ascii") for k in range(idx)]
+    keys = [f"{k}".encode("ascii") for k in range(idx)]
     shape = img.shape if db_channels_first else img.permute(1, 2, 0).shape
     with db.begin(write=True) as txn:
         txn.put(b"__keys__", pickle.dumps(keys))

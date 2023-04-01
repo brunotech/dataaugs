@@ -18,11 +18,11 @@ class RestartingLineSearch(torch.optim.SGD):
     def __init__(self, params, lr=0.1, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, interval=10, factor=0.25, max_iter=10):
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
+            raise ValueError(f"Invalid momentum value: {momentum}")
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening, nesterov=nesterov,
                         weight_decay=weight_decay, interval=interval, factor=factor, max_iter=max_iter)
@@ -31,19 +31,20 @@ class RestartingLineSearch(torch.optim.SGD):
         torch.optim.Optimizer.__init__(self, params, defaults)
 
     def _save_initial_state(self):
-        self.buffer = dict()
-        self.momentum_buffer = dict()
+        self.buffer = {}
+        self.momentum_buffer = {}
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 self.buffer[param] = param.clone().detach()
-                if self.state[param].get('momentum_buffer') is not None:
-                    self.momentum_buffer[param] = self.state[param]['momentum_buffer'].clone().detach()
-                else:
-                    self.momentum_buffer[param] = None
+                self.momentum_buffer[param] = (
+                    self.state[param]['momentum_buffer'].clone().detach()
+                    if self.state[param].get('momentum_buffer') is not None
+                    else None
+                )
 
     def _load_initial_state(self):
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 param.copy_(self.buffer[param])
                 if self.momentum_buffer[param] is not None:
                     self.state[param]['momentum_buffer'].copy_(self.momentum_buffer[param])
@@ -99,11 +100,11 @@ class NonMonotoneLinesearch(torch.optim.SGD):
     def __init__(self, params, lr=0.1, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, interval=10, factor=0.25, max_iter=10):
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
+            raise ValueError(f"Invalid momentum value: {momentum}")
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening, nesterov=nesterov,
                         weight_decay=weight_decay, interval=interval, factor=factor, max_iter=max_iter)
@@ -112,19 +113,20 @@ class NonMonotoneLinesearch(torch.optim.SGD):
         torch.optim.Optimizer.__init__(self, params, defaults)
 
     def _save_initial_state(self):
-        self.buffer = dict()
-        self.momentum_buffer = dict()
+        self.buffer = {}
+        self.momentum_buffer = {}
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 self.buffer[param] = param.clone().detach()
-                if self.state[param].get('momentum_buffer') is not None:
-                    self.momentum_buffer[param] = self.state[param]['momentum_buffer'].clone().detach()
-                else:
-                    self.momentum_buffer[param] = None
+                self.momentum_buffer[param] = (
+                    self.state[param]['momentum_buffer'].clone().detach()
+                    if self.state[param].get('momentum_buffer') is not None
+                    else None
+                )
 
     def _load_initial_state(self):
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 param.copy_(self.buffer[param])
                 if self.momentum_buffer[param] is not None:
                     self.state[param]['momentum_buffer'].copy_(self.momentum_buffer[param])
@@ -163,7 +165,7 @@ class NonMonotoneLinesearch(torch.optim.SGD):
         else:
             recent_loss_max = max(self.state['loss'][-global_group['interval']:])
 
-            for iteration in range(global_group['max_iter']):
+            for _ in range(global_group['max_iter']):
                 if loss.item() < recent_loss_max:
                     self.state['loss'].append(loss.item())
                     return
@@ -189,11 +191,11 @@ class WolfeGradientDescent(torch.optim.Optimizer):
     def __init__(self, params, lr=0.1, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, c1=1e-4, c2=0.9, alpha_max=10.0, max_iter=10):
         if lr < 0.0:
-            raise ValueError("Invalid learning rate: {}".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr}")
         if momentum < 0.0:
-            raise ValueError("Invalid momentum value: {}".format(momentum))
+            raise ValueError(f"Invalid momentum value: {momentum}")
         if weight_decay < 0.0:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
                         weight_decay=weight_decay, nesterov=nesterov,
@@ -243,15 +245,14 @@ class WolfeGradientDescent(torch.optim.Optimizer):
         return p_k_groups, p_k_offset
 
     def _evaluate_phi(self, alpha, p_k_groups, closure, LUT_ref):
-        if alpha not in LUT_ref:
-            self._attempt_step(p_k_groups, alpha)
-            with torch.enable_grad():
-                loss = closure().item()
-            phi_grad = self._get_phi_grad(p_k_groups).item()
-            LUT_ref[alpha] = dict(val=loss, grad=phi_grad)
-            return loss, phi_grad
-        else:
+        if alpha in LUT_ref:
             return LUT_ref[alpha]['val'], LUT_ref[alpha]['grad']
+        self._attempt_step(p_k_groups, alpha)
+        with torch.enable_grad():
+            loss = closure().item()
+        phi_grad = self._get_phi_grad(p_k_groups).item()
+        LUT_ref[alpha] = dict(val=loss, grad=phi_grad)
+        return loss, phi_grad
 
     def _get_phi_grad(self, p_k_groups):
         p_k_offset = 0
@@ -272,14 +273,14 @@ class WolfeGradientDescent(torch.optim.Optimizer):
         self.has_stepped = True
 
     def _save_initial_state(self):
-        self.buffer = dict()
+        self.buffer = {}
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 self.buffer[param] = param.clone().detach()
 
     def _load_initial_state(self):
         for group in self.param_groups:
-            for i, param in enumerate(group['params']):
+            for param in group['params']:
                 param.copy_(self.buffer[param])
 
     @torch.no_grad()
@@ -314,7 +315,7 @@ class WolfeGradientDescent(torch.optim.Optimizer):
 
         prev_loss = float('inf')
         prev_alpha = 0
-        for iteration in range(global_group['max_iter']):
+        for _ in range(global_group['max_iter']):
             # Take the step to figure out phi(a_i)
             self._evaluate_phi(alpha, p_k, closure, phi)
             # Step prediction from here:
@@ -347,7 +348,7 @@ class WolfeGradientDescent(torch.optim.Optimizer):
     def _zoom(self, alpha_low, alpha_high, p_k, closure, phi):
         global_group = self.param_groups[0]
 
-        for iteration in range(global_group['max_iter']):
+        for _ in range(global_group['max_iter']):
             if abs(alpha_low - alpha_high) < 1e-4:  # Nocedal spinning in his chair :<
                 return alpha_low
             alpha = self._interpolate(alpha_low, alpha_high, phi)

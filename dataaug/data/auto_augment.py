@@ -2,6 +2,7 @@
 https://github.com/rwightman/pytorch-image-models/commit/3cdaf5ed56b508ac11102af36820eea79a6795f0.
 """
 
+
 """ AutoAugment, RandAugment, and AugMix for PyTorch
 
 This code implements the searched ImageNet policies with various tweaks and improvements and
@@ -233,7 +234,7 @@ import PIL
 import numpy as np
 
 
-_PIL_VER = tuple([int(x) for x in PIL.__version__.split('.')[:2]])
+_PIL_VER = tuple(int(x) for x in PIL.__version__.split('.')[:2])
 
 _FILL = (128, 128, 128)
 
@@ -348,18 +349,15 @@ def solarize_add(img, add, thresh=128, **__):
             lut.append(min(255, i + add))
         else:
             lut.append(i)
-    if img.mode in ("L", "RGB"):
-        if img.mode == "RGB" and len(lut) == 256:
-            lut = lut + lut + lut
-        return img.point(lut)
-    else:
+    if img.mode not in ("L", "RGB"):
         return img
+    if img.mode == "RGB" and len(lut) == 256:
+        lut = lut + lut + lut
+    return img.point(lut)
 
 
 def posterize(img, bits_to_keep, **__):
-    if bits_to_keep >= 8:
-        return img
-    return ImageOps.posterize(img, bits_to_keep)
+    return img if bits_to_keep >= 8 else ImageOps.posterize(img, bits_to_keep)
 
 
 def contrast(img, factor, **__):
@@ -550,7 +548,7 @@ class AugmentOp:
             # magnitude randomization enabled
             if self.magnitude_std == float('inf'):
                 magnitude = random.uniform(0, magnitude)
-            elif self.magnitude_std > 0:
+            else:
                 magnitude = random.gauss(magnitude, self.magnitude_std)
         # default upper_bound for the timm RA impl is _LEVEL_DENOM (10)
         # setting magnitude_max overrides this to allow M > 10 (behaviour closer to Google TF RA impl)
@@ -589,8 +587,7 @@ def auto_augment_policy_v0(hparams):
         [('Solarize', 0.6, 8), ('Equalize', 0.6, 1)],
         [('Color', 0.8, 6), ('Rotate', 0.4, 5)],
     ]
-    pc = [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
-    return pc
+    return [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
 
 
 def auto_augment_policy_v0r(hparams):
@@ -623,8 +620,7 @@ def auto_augment_policy_v0r(hparams):
         [('Solarize', 0.6, 8), ('Equalize', 0.6, 1)],
         [('Color', 0.8, 6), ('Rotate', 0.4, 5)],
     ]
-    pc = [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
-    return pc
+    return [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
 
 
 def auto_augment_policy_original(hparams):
@@ -656,8 +652,7 @@ def auto_augment_policy_original(hparams):
         [('Color', 0.6, 4), ('Contrast', 1.0, 8)],
         [('Equalize', 0.8, 8), ('Equalize', 0.6, 3)],
     ]
-    pc = [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
-    return pc
+    return [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
 
 
 def auto_augment_policy_originalr(hparams):
@@ -689,8 +684,7 @@ def auto_augment_policy_originalr(hparams):
         [('Color', 0.6, 4), ('Contrast', 1.0, 8)],
         [('Equalize', 0.8, 8), ('Equalize', 0.6, 3)],
     ]
-    pc = [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
-    return pc
+    return [[AugmentOp(*a, hparams=hparams) for a in sp] for sp in policy]
 
 
 def auto_augment_policy(name='v0', hparams=None):
@@ -704,7 +698,7 @@ def auto_augment_policy(name='v0', hparams=None):
     elif name == 'v0r':
         return auto_augment_policy_v0r(hparams)
     else:
-        assert False, 'Unknown AA policy (%s)' % name
+        assert False, f'Unknown AA policy ({name})'
 
 
 class AutoAugment:
@@ -984,11 +978,11 @@ class AugMixAugment:
     def __call__(self, img):
         mixing_weights = np.float32(np.random.dirichlet([self.alpha] * self.width))
         m = np.float32(np.random.beta(self.alpha, self.alpha))
-        if self.blended:
-            mixed = self._apply_blended(img, mixing_weights, m)
-        else:
-            mixed = self._apply_basic(img, mixing_weights, m)
-        return mixed
+        return (
+            self._apply_blended(img, mixing_weights, m)
+            if self.blended
+            else self._apply_basic(img, mixing_weights, m)
+        )
 
 
 def augment_and_mix_transform(config_str, hparams):

@@ -54,7 +54,12 @@ class TinyImageNet(torch.utils.data.Dataset):
         self.cached = cached
 
         self.split_dir = os.path.join(root, self.folder, self.split)
-        self.image_paths = sorted(glob.iglob(os.path.join(self.split_dir, "**", "*.%s" % self.EXTENSION), recursive=True))
+        self.image_paths = sorted(
+            glob.iglob(
+                os.path.join(self.split_dir, "**", f"*.{self.EXTENSION}"),
+                recursive=True,
+            )
+        )
         self.labels = {}  # fname - label number mapping
 
         if download:
@@ -93,13 +98,13 @@ class TinyImageNet(torch.utils.data.Dataset):
                     self.labels["%s_%d.%s" % (label_text, cnt, self.EXTENSION)] = i
         elif self.split == "val":
             with open(os.path.join(self.split_dir, self.VAL_ANNOTATION_FILE), "r") as fp:
-                for line in fp.readlines():
+                for line in fp:
                     terms = line.split("\t")
                     file_name, label_text = terms[0], terms[1]
                     self.labels[file_name] = self.label_text_to_number[label_text]
 
         # Build class names
-        label_text_to_word = dict()
+        label_text_to_word = {}
         with open(os.path.join(self.root, self.folder, self.CLASSES), "r") as file:
             for line in file:
                 label_text, word = line.split("\t")
@@ -132,10 +137,7 @@ class TinyImageNet(torch.utils.data.Dataset):
 
         img = self.transform(img) if self.transform else img
         target = self.target_transform(target) if self.target_transform else target
-        if self.split == "test":
-            return img, None
-        else:
-            return img, target
+        return (img, None) if self.split == "test" else (img, target)
 
 
 class CIFAR10C(torch.utils.data.Dataset):
@@ -185,9 +187,8 @@ class CIFAR10C(torch.utils.data.Dataset):
             return False
         if file_hash.hexdigest() in self.data_md5s:
             return True
-        else:
-            print(f"Hash {file_hash.hexdigest()} not matching.")
-            return False
+        print(f"Hash {file_hash.hexdigest()} not matching.")
+        return False
 
     def download(self):
         if self._check_integrity():
@@ -200,11 +201,7 @@ class CIFAR10C(torch.utils.data.Dataset):
         data = []
         targets = []
         num_categories = 0
-        if mmap:
-            mmap_mode = "c"  # copy on write
-        else:
-            mmap_mode = None
-
+        mmap_mode = "c" if mmap else None
         for category_file in os.listdir(os.path.join(self.root, self.folder)):
             X = np.load(os.path.join(self.root, self.folder, category_file))
             if "labels" in category_file:
@@ -262,7 +259,7 @@ class CINIC10(torch.utils.data.Dataset):
         self.deduplicate = deduplicate
 
         self.dir = os.path.join(root, self.folder)
-        self.pre_cache = dict()
+        self.pre_cache = {}
         self.image_paths = sorted(
             glob.iglob(os.path.join(os.path.join(self.root, self.folder, "**", f"*{self.EXTENSION}")), recursive=True)
         )
@@ -289,9 +286,8 @@ class CINIC10(torch.utils.data.Dataset):
         file_hash = hashlib.md5(string_rep)
         if file_hash.hexdigest() in self.data_md5s:
             return True
-        else:
-            print(f"Hash {file_hash.hexdigest()} not matching.")
-            return False
+        print(f"Hash {file_hash.hexdigest()} not matching.")
+        return False
 
     def download(self):
         if self._check_integrity():
@@ -306,18 +302,17 @@ class CINIC10(torch.utils.data.Dataset):
 
     def _remove_cifar10_traintest(self):
         """Remove CIFAR-10 test images."""
-        train_ids = []
-        for idx, img_path in enumerate(self.image_paths):
-            if "cifar" in img_path.split(os.sep)[-1]:  # and "test" in img_path:
-                pass
-            else:
-                train_ids.append(idx)
+        train_ids = [
+            idx
+            for idx, img_path in enumerate(self.image_paths)
+            if "cifar" not in img_path.split(os.sep)[-1]
+        ]
         return [self.image_paths[idx] for idx in train_ids]
 
     def _remove_invalid_data(self):
         """This is a terrible dataset..."""
         train_ids = []
-        self.pre_cache = dict()  # CML is slow in loading files. Cache only once.
+        self.pre_cache = {}
         for idx, path in enumerate(self.image_paths):
             try:
                 img = Image.open(self.image_paths[idx], formats=("PNG",))
@@ -358,10 +353,12 @@ class CINIC10(torch.utils.data.Dataset):
 
     def _parse_labels(self):
         self.labels = []
-        for idx, path in enumerate(self.image_paths):
-            for cls_idx, class_name in enumerate(self.classes):
-                if class_name in path:
-                    self.labels.append(cls_idx)
+        for path in self.image_paths:
+            self.labels.extend(
+                cls_idx
+                for cls_idx, class_name in enumerate(self.classes)
+                if class_name in path
+            )
 
     def _build_cache(self):
         """Cache images in RAM."""
@@ -373,7 +370,7 @@ class CINIC10(torch.utils.data.Dataset):
                 img = Image.open(self.image_paths[index])
                 img = img.convert("RGB")
             self.cache.append(img)
-        self.pre_cache = dict()
+        self.pre_cache = {}
 
     def __len__(self):
         """Return length via image paths."""

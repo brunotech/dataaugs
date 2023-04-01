@@ -22,9 +22,7 @@ def is_legal(v):
         v (tensor): tensor to be checked
 
     """
-    legal = not torch.isnan(v).any() and not torch.isinf(v)
-
-    return legal
+    return not torch.isnan(v).any() and not torch.isinf(v)
 
 
 def polyinterp(points, x_min_bound=None, x_max_bound=None):
@@ -225,7 +223,9 @@ class LBFGS(torch.optim.Optimizer):
                         c1=c1, c2=c2, max_linesearches=max_linesearches, weight_decay=weight_decay)
         super().__init__(params, defaults)
 
-        self.numel = sum([p.numel() for group in self.param_groups for p in group['params']])
+        self.numel = sum(
+            p.numel() for group in self.param_groups for p in group['params']
+        )
 
         state = self.state['global_state']
         state.setdefault('n_iter', 0)
@@ -263,16 +263,13 @@ class LBFGS(torch.optim.Optimizer):
     def _copy_params(self):
         current_params = []
         for group in self.param_groups:
-            for p in group['params']:
-                current_params.append(deepcopy(p.data))
+            current_params.extend(deepcopy(p.data) for p in group['params'])
         return current_params
 
     def _load_params(self, current_params):
-        i = 0
-        for group in self.param_groups:
-            for p in group['params']:
+        for i, group in enumerate(self.param_groups):
+            for _ in group['params']:
                 param.data = current_params[i]
-            i += 1
 
     def two_loop_recursion(self, vec):
         """
@@ -340,11 +337,11 @@ class LBFGS(torch.optim.Optimizer):
 
         # variables cached in state (for tracing)
         state = self.state['global_state']
-        fail = state.get('fail')
+        if fail := state.get('fail'):
+            # save skip
+            state['fail_skips'] += 1
 
-        # check if line search failed
-        if not fail:
-
+        else:
             d = state.get('d')
             t = state.get('t')
             old_dirs = state.get('old_dirs')
@@ -387,10 +384,6 @@ class LBFGS(torch.optim.Optimizer):
             else:
                 # save skip
                 state['curv_skips'] += 1
-
-        else:
-            # save skip
-            state['fail_skips'] += 1
 
         return
 

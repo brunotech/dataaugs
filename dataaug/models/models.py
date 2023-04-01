@@ -31,7 +31,7 @@ def construct_model(cfg_model, channels, classes):
             norm=cfg_model.normalization,
             downsample=cfg_model.downsample,
             width_per_group=cfg_model.width,
-            zero_init_residual=True if "skip_residual" in cfg_model.initialization else False,
+            zero_init_residual="skip_residual" in cfg_model.initialization,
         )
     elif "orbitresnet" in cfg_model.name.lower():
         report_invariance = True
@@ -47,7 +47,7 @@ def construct_model(cfg_model, channels, classes):
             norm=cfg_model.normalization,
             downsample=cfg_model.downsample,
             width_per_group=cfg_model.width,
-            zero_init_residual=True if "skip_residual" in cfg_model.initialization else False,
+            zero_init_residual="skip_residual" in cfg_model.initialization,
         )
     elif "resnet" in cfg_model.name.lower():
         block, layers = resnet_depths_to_config(cfg_model.depth)
@@ -62,7 +62,7 @@ def construct_model(cfg_model, channels, classes):
             norm=cfg_model.normalization,
             downsample=cfg_model.downsample,
             width_per_group=cfg_model.width,
-            zero_init_residual=True if "skip_residual" in cfg_model.initialization else False,
+            zero_init_residual="skip_residual" in cfg_model.initialization,
         )
     elif "densenet" in cfg_model.name.lower():
         growth_rate, block_config, num_init_features = densenet_depths_to_config(cfg_model.depth)
@@ -239,9 +239,8 @@ def construct_model(cfg_model, channels, classes):
     else:
         raise ValueError(f"Could not find model with name {cfg_model.name}.")
 
-    num_params, num_buffers = (
-        sum([p.numel() for p in model.parameters()]),
-        sum([b.numel() for b in model.buffers()]),
+    num_params, num_buffers = sum(p.numel() for p in model.parameters()), sum(
+        b.numel() for b in model.buffers()
     )
     print(f"Model architecture {cfg_model.name} loaded with {num_params:,} parameters and {num_buffers:,} buffers.")
 
@@ -378,5 +377,4 @@ class OrbitMappedResNet(ResNet):
         score = <(0, 1) , integrate_hw grad(inputs)_bchw dhw
         """
         diffs = torch.nn.functional.conv2d(inputs, self.weight, None, stride=1, padding=1, dilation=1, groups=self.groups)
-        score = diffs[:, 1::2].mean(dim=[1, 2, 3])
-        return score
+        return diffs[:, 1::2].mean(dim=[1, 2, 3])

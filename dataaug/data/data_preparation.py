@@ -73,7 +73,7 @@ def construct_dataloader(cfg_data, cfg_impl, cfg_hyp, dryrun=False):
         persistent_workers=cfg_impl.persistent_workers if num_workers > 0 else False,
     )
     # Distributed samplers can split data across machines,
-    validloaders = dict()
+    validloaders = {}
     for name, validset in validsets.items():
         validloader = torch.utils.data.DataLoader(
             validset,
@@ -212,7 +212,7 @@ def _get_autoaugment_timm(auto_augment, img_size_min=32, mean=(0, 0, 0)):
     assert isinstance(auto_augment, str)
     aa_params = dict(
         translate_const=int(img_size_min * 0.45),
-        img_mean=tuple([min(255, round(255 * x)) for x in mean]),
+        img_mean=tuple(min(255, round(255 * x)) for x in mean),
     )
     if auto_augment.startswith("rand"):
         return rand_augment_transform(auto_augment, aa_params)

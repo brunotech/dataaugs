@@ -12,7 +12,10 @@ def optim_interface(model, cfg_hyp):
     """Construct optimizer and scheduler objects."""
     optim_params = {k: v for k, v in cfg_hyp.optim.items() if k != "name"}
 
-    if cfg_hyp.only_linear_layers_weight_decay and not cfg_hyp.optim.name == "GD-AGC":
+    if (
+        cfg_hyp.only_linear_layers_weight_decay
+        and cfg_hyp.optim.name != "GD-AGC"
+    ):
         parameter_iterable = []
         for key, value in model.named_parameters():
             # this regex snippet is modified from https://github.com/benjs/nfnets_pytorch/blob/master/train.py
@@ -48,9 +51,17 @@ def optim_interface(model, cfg_hyp):
         for group in optimizer.param_groups:
             if group["name"].startswith("linear"):
                 group["clipping"] = None
-            if cfg_hyp.only_linear_layers_weight_decay:
-                if len(re.findall("stem.*(bias|gain)|conv.*(bias|gain)|skip_gain", group["name"])) > 0:
-                    group["weight_decay"] = 0
+            if (
+                cfg_hyp.only_linear_layers_weight_decay
+                and len(
+                    re.findall(
+                        "stem.*(bias|gain)|conv.*(bias|gain)|skip_gain",
+                        group["name"],
+                    )
+                )
+                > 0
+            ):
+                group["weight_decay"] = 0
     else:
         raise ValueError(f"Invalid optimizer {cfg_hyp.optim.name} provided.")
 

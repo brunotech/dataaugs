@@ -28,13 +28,9 @@ class FISTA(torch.optim.Optimizer):
         This requires that projetion is a function handle to be applied to
         the parameter
         """
-        if not 0.0 <= lr:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        if projection is None:
-            self.projection = None
-        else:
-            self.projection = projection
-
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        self.projection = None if projection is None else projection
         defaults = dict(lr=lr, fista_mod=fista_mod, projection=projection)
         super(FISTA, self).__init__(params, defaults)
 
@@ -46,10 +42,7 @@ class FISTA(torch.optim.Optimizer):
         Single optimization step
         """
 
-        loss = None
-        if closure is not None:
-            loss = closure()
-
+        loss = closure() if closure is not None else None
         for group in self.param_groups:
             for param in group['params']:
                 if param.grad is None:
@@ -95,13 +88,9 @@ class FISTALineSearch(torch.optim.Optimizer):
         This requires that projection is a function handle to be applied to the
         parameter
         """
-        if not 0.0 <= lr:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        if projection is None:
-            self.projection = lambda x: x
-        else:
-            self.projection = projection
-
+        if lr < 0.0:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        self.projection = (lambda x: x) if projection is None else projection
         defaults = dict(lr=lr, eta=eta, max_searches=max_searches,
                         fista_mod=fista_mod, projection=projection, tk=tk)
         super(FISTALineSearch, self).__init__(params, defaults)
@@ -134,7 +123,7 @@ class FISTALineSearch(torch.optim.Optimizer):
             # Phase I Linesearch for largest possible lr
             loss_yk = closure(requires_grad=False)
 
-            for searches in range(group['max_searches']):
+            for _ in range(group['max_searches']):
                 linearization = group['params'][0].new_zeros(1)
                 distance = group['params'][0].new_zeros(1)
                 for param in group['params']:
@@ -158,21 +147,19 @@ class FISTALineSearch(torch.optim.Optimizer):
                 loss_xk = closure(requires_grad=False)
                 D_h_xk_yk = loss_xk - loss_yk - linearization
 
-                # Check lineseach condition:
-                if D_h_xk_yk * group['lr'] > distance:
-                    # Reduce lr:
-                    group['lr'] *= group['eta']
-                    # Undo gradient step
-                    # If we had no projection this would be easier done via
-                    # adding the gradient back on
-                    for param in group['params']:
-                        if param.grad is None:
-                            continue
-                        param.data = self.state[param]['yk'].clone()
-
-                else:
+                if D_h_xk_yk * group['lr'] <= distance:
                     # Break loop and continue to next phase
                     break
+
+                # Reduce lr:
+                group['lr'] *= group['eta']
+                # Undo gradient step
+                # If we had no projection this would be easier done via
+                # adding the gradient back on
+                for param in group['params']:
+                    if param.grad is None:
+                        continue
+                    param.data = self.state[param]['yk'].clone()
 
             # Phase II - Overrelaxation Step
             for param in group['params']:
@@ -286,11 +273,7 @@ class SGDLineSearch(torch.optim.Optimizer):
                     else:
                         buf = param_state['momentum_buffer']
                         buf.mul_(momentum).add_(1 - dampening, d_p)
-                    if nesterov:
-                        d_p = d_p.add(momentum, buf)
-                    else:
-                        d_p = buf
-
+                    d_p = d_p.add(momentum, buf) if nesterov else buf
                 # First candidate step
                 p.data.add_(-group['lr'], d_p)
                 with torch.no_grad():
